@@ -5,7 +5,6 @@ import (
 	"bufio"
 	_ "embed"
 	"errors"
-	"fmt"
 	"net"
 	"net/textproto"
 	"regexp"
@@ -13,108 +12,39 @@ import (
 
 	"github.com/influxdata/telegraf"
 	"github.com/influxdata/telegraf/config"
-	"github.com/influxdata/telegraf/internal/choice"
 	"github.com/influxdata/telegraf/plugins/inputs"
 )
 
 //go:embed sample.conf
 var sampleConfig string
 
-type resultType uint64
+type ResultType uint64
 
 const (
-	success          resultType = 0
-	timeout          resultType = 1
-	connectionFailed resultType = 2
-	readFailed       resultType = 3
-	stringMismatch   resultType = 4
+	Success          ResultType = 0
+	Timeout          ResultType = 1
+	ConnectionFailed ResultType = 2
+	ReadFailed       ResultType = 3
+	StringMismatch   ResultType = 4
 )
 
+// NetResponse struct
 type NetResponse struct {
-	Address     string          `toml:"address"`
-	Timeout     config.Duration `toml:"timeout"`
-	ReadTimeout config.Duration `toml:"read_timeout"`
-	Send        string          `toml:"send"`
-	Expect      string          `toml:"expect"`
-	Protocol    string          `toml:"protocol"`
+	Address     string
+	Timeout     config.Duration
+	ReadTimeout config.Duration
+	Send        string
+	Expect      string
+	Protocol    string
 }
 
 func (*NetResponse) SampleConfig() string {
 	return sampleConfig
 }
 
-func (n *NetResponse) Init() error {
-	// Set default values
-	if n.Timeout == 0 {
-		n.Timeout = config.Duration(time.Second)
-	}
-	if n.ReadTimeout == 0 {
-		n.ReadTimeout = config.Duration(time.Second)
-	}
-	// Check send and expected string
-	if n.Protocol == "udp" && n.Send == "" {
-		return errors.New("send string cannot be empty")
-	}
-	if n.Protocol == "udp" && n.Expect == "" {
-		return errors.New("expected string cannot be empty")
-	}
-	// Prepare host and port
-	host, port, err := net.SplitHostPort(n.Address)
-	if err != nil {
-		return err
-	}
-	if host == "" {
-		n.Address = "localhost:" + port
-	}
-	if port == "" {
-		return errors.New("bad port in config option address")
-	}
-
-	if err := choice.Check(n.Protocol, []string{"tcp", "udp"}); err != nil {
-		return fmt.Errorf("config option protocol: %w", err)
-	}
-
-	return nil
-}
-
-func (n *NetResponse) Gather(acc telegraf.Accumulator) error {
-	// Prepare host and port
-	host, port, err := net.SplitHostPort(n.Address)
-	if err != nil {
-		return err
-	}
-
-	// Prepare data
-	tags := map[string]string{"server": host, "port": port}
-	var fields map[string]interface{}
-	var returnTags map[string]string
-
-	// Gather data
-	switch n.Protocol {
-	case "tcp":
-		returnTags, fields, err = n.tcpGather()
-		if err != nil {
-			return err
-		}
-		tags["protocol"] = "tcp"
-	case "udp":
-		returnTags, fields, err = n.udpGather()
-		if err != nil {
-			return err
-		}
-		tags["protocol"] = "udp"
-	}
-
-	// Merge the tags
-	for k, v := range returnTags {
-		tags[k] = v
-	}
-	// Add metrics
-	acc.AddFields("net_response", fields, tags)
-	return nil
-}
-
-func (n *NetResponse) tcpGather() (map[string]string, map[string]interface{}, error) {
+// TCPGather will execute if there are TCP tests defined in the configuration.
+// It will return a map[string]interface{} for fields and a map[string]string for tags
+func (n *NetResponse) TCPGather() (map[string]string, map[string]interface{}, error) {
 	// Prepare returns
 	tags := make(map[string]string)
 	fields := make(map[string]interface{})
@@ -126,11 +56,10 @@ func (n *NetResponse) tcpGather() (map[string]string, map[string]interface{}, er
 	responseTime := time.Since(start).Seconds()
 	// Handle error
 	if err != nil {
-		var e net.Error
-		if errors.As(err, &e) && e.Timeout() {
-			setResult(timeout, fields, tags, n.Expect)
+		if e, ok := err.(net.Error); ok && e.Timeout() {
+			setResult(Timeout, fields, tags, n.Expect)
 		} else {
-			setResult(connectionFailed, fields, tags, n.Expect)
+			setResult(ConnectionFailed, fields, tags, n.Expect)
 		}
 		return tags, fields, nil
 	}
@@ -159,25 +88,27 @@ func (n *NetResponse) tcpGather() (map[string]string, map[string]interface{}, er
 		responseTime = time.Since(start).Seconds()
 		// Handle error
 		if err != nil {
-			setResult(readFailed, fields, tags, n.Expect)
+			setResult(ReadFailed, fields, tags, n.Expect)
 		} else {
 			// Looking for string in answer
 			regEx := regexp.MustCompile(`.*` + n.Expect + `.*`)
 			find := regEx.FindString(data)
 			if find != "" {
-				setResult(success, fields, tags, n.Expect)
+				setResult(Success, fields, tags, n.Expect)
 			} else {
-				setResult(stringMismatch, fields, tags, n.Expect)
+				setResult(StringMismatch, fields, tags, n.Expect)
 			}
 		}
 	} else {
-		setResult(success, fields, tags, n.Expect)
+		setResult(Success, fields, tags, n.Expect)
 	}
 	fields["response_time"] = responseTime
 	return tags, fields, nil
 }
 
-func (n *NetResponse) udpGather() (map[string]string, map[string]interface{}, error) {
+// UDPGather will execute if there are UDP tests defined in the configuration.
+// It will return a map[string]interface{} for fields and a map[string]string for tags
+func (n *NetResponse) UDPGather() (map[string]string, map[string]interface{}, error) {
 	// Prepare returns
 	tags := make(map[string]string)
 	fields := make(map[string]interface{})
@@ -187,14 +118,18 @@ func (n *NetResponse) udpGather() (map[string]string, map[string]interface{}, er
 	udpAddr, err := net.ResolveUDPAddr("udp", n.Address)
 	// Handle error
 	if err != nil {
-		setResult(connectionFailed, fields, tags, n.Expect)
+		setResult(ConnectionFailed, fields, tags, n.Expect)
+		// Error encoded in result
+		//nolint:nilerr
 		return tags, fields, nil
 	}
 	// Connecting
 	conn, err := net.DialUDP("udp", nil, udpAddr)
 	// Handle error
 	if err != nil {
-		setResult(connectionFailed, fields, tags, n.Expect)
+		setResult(ConnectionFailed, fields, tags, n.Expect)
+		// Error encoded in result
+		//nolint:nilerr
 		return tags, fields, nil
 	}
 	defer conn.Close()
@@ -215,7 +150,9 @@ func (n *NetResponse) udpGather() (map[string]string, map[string]interface{}, er
 	responseTime := time.Since(start).Seconds()
 	// Handle error
 	if err != nil {
-		setResult(readFailed, fields, tags, n.Expect)
+		setResult(ReadFailed, fields, tags, n.Expect)
+		// Error encoded in result
+		//nolint:nilerr
 		return tags, fields, nil
 	}
 
@@ -223,9 +160,9 @@ func (n *NetResponse) udpGather() (map[string]string, map[string]interface{}, er
 	regEx := regexp.MustCompile(`.*` + n.Expect + `.*`)
 	find := regEx.FindString(string(buf))
 	if find != "" {
-		setResult(success, fields, tags, n.Expect)
+		setResult(Success, fields, tags, n.Expect)
 	} else {
-		setResult(stringMismatch, fields, tags, n.Expect)
+		setResult(StringMismatch, fields, tags, n.Expect)
 	}
 
 	fields["response_time"] = responseTime
@@ -233,18 +170,94 @@ func (n *NetResponse) udpGather() (map[string]string, map[string]interface{}, er
 	return tags, fields, nil
 }
 
-func setResult(result resultType, fields map[string]interface{}, tags map[string]string, expect string) {
+// Gather is called by telegraf when the plugin is executed on its interval.
+// It will call either UDPGather or TCPGather based on the configuration and
+// also fill an Accumulator that is supplied.
+func (n *NetResponse) Gather(acc telegraf.Accumulator) error {
+	// Set default values
+	if n.Timeout == 0 {
+		n.Timeout = config.Duration(time.Second)
+	}
+	if n.ReadTimeout == 0 {
+		n.ReadTimeout = config.Duration(time.Second)
+	}
+	// Check send and expected string
+	if n.Protocol == "udp" && n.Send == "" {
+		return errors.New("send string cannot be empty")
+	}
+	if n.Protocol == "udp" && n.Expect == "" {
+		return errors.New("expected string cannot be empty")
+	}
+	// Prepare host and port
+	host, port, err := net.SplitHostPort(n.Address)
+	if err != nil {
+		return err
+	}
+	if host == "" {
+		host = "localhost"
+		n.Address = host + ":" + port
+	}
+	if port == "" {
+		return errors.New("bad port")
+	}
+
+	//Solving DNS before
+	resolvedIP := host
+	addrs, err := net.LookupHost(host)
+
+	if err == nil && len(addrs) > 0 {
+		resolvedIP = addrs[0]
+		//changing n.address for ip
+		originalAddress := n.Address
+		n.Address = net.JoinHostPort(resolvedIP, port)
+		defer func() { n.Address = originalAddress }()
+	} else {
+		//if error keeps original address
+	}
+	// Prepare data
+	tags := map[string]string{"server": host, "port": port}
+	var fields map[string]interface{}
+	var returnTags map[string]string
+
+	// Gather data
+	switch n.Protocol {
+	case "tcp":
+		returnTags, fields, err = n.TCPGather()
+		if err != nil {
+			return err
+		}
+		tags["protocol"] = "tcp"
+	case "udp":
+		returnTags, fields, err = n.UDPGather()
+		if err != nil {
+			return err
+		}
+		tags["protocol"] = "udp"
+	default:
+		return errors.New("bad protocol")
+	}
+
+	// Merge the tags
+	for k, v := range returnTags {
+		tags[k] = v
+	}
+	// Add metrics
+	acc.AddFields("net_response", fields, tags)
+	return nil
+}
+
+func setResult(result ResultType, fields map[string]interface{}, tags map[string]string, expect string) {
 	var tag string
 	switch result {
-	case success:
+	case Success:
 		tag = "success"
-	case timeout:
+	case Timeout:
 		tag = "timeout"
-	case connectionFailed:
+	case ConnectionFailed:
 		tag = "connection_failed"
-	case readFailed:
+	case ReadFailed:
 		tag = "read_failed"
-	case stringMismatch:
+	case StringMismatch:
 		tag = "string_mismatch"
 	}
 
@@ -256,7 +269,7 @@ func setResult(result resultType, fields map[string]interface{}, tags map[string
 
 	// deprecated in 1.4; use result tag
 	if expect != "" {
-		fields["string_found"] = result == success
+		fields["string_found"] = result == Success
 	}
 }
 
