@@ -187,7 +187,7 @@ require (
 	github.com/snowflakedb/gosnowflake v1.11.2
 	github.com/srebhan/cborquery v1.0.1
 	github.com/srebhan/protobufquery v1.0.1
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tbrandon/mbserver v0.0.0-20170611213546-993e1772cc62
 	github.com/testcontainers/testcontainers-go v0.34.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.34.0
@@ -212,14 +212,14 @@ require (
 	go.opentelemetry.io/proto/otlp v1.3.1
 	go.starlark.net v0.0.0-20240925182052-1207426daebd
 	go.step.sm/crypto v0.54.0
-	golang.org/x/crypto v0.28.0
+	golang.org/x/crypto v0.32.0
 	golang.org/x/mod v0.21.0
 	golang.org/x/net v0.30.0
 	golang.org/x/oauth2 v0.23.0
-	golang.org/x/sync v0.9.0
-	golang.org/x/sys v0.26.0
-	golang.org/x/term v0.25.0
-	golang.org/x/text v0.20.0
+	golang.org/x/sync v0.10.0
+	golang.org/x/sys v0.29.0
+	golang.org/x/term v0.28.0
+	golang.org/x/text v0.21.0
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20211230205640-daad0b7ba671
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/api v0.203.0
@@ -329,7 +329,7 @@ require (
 	github.com/go-chi/chi/v5 v5.1.0 // indirect
 	github.com/go-darwin/apfs v0.0.0-20211011131704-f84b94dbf348 // indirect
 	github.com/go-git/go-billy/v5 v5.5.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.0.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.0.5 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
